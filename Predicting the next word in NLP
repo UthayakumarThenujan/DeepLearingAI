@@ -1,0 +1,1667 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/UthayakumarThenujan/DeepLearingAI/blob/main/Predicting%20the%20next%20word%20in%20NLP\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "bFWbEb6uGbN-"
+      },
+      "source": [
+        "# Week 4: Predicting the next word\n",
+        "\n",
+        "Welcome to this assignment! During this week you saw how to create a model that will predict the next word in a text sequence, now you will implement such model and train it using a corpus of Shakespeare's sonnets, while also creating some helper functions to pre-process the data.\n",
+        "\n",
+        "\n",
+        "Let's get started!"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Cp4A-ZBwSN11"
+      },
+      "source": [
+        "_**NOTE:** To prevent errors from the autograder, please avoid editing or deleting non-graded cells in this notebook . Please only put your solutions in between the `### START CODE HERE` and `### END CODE HERE` code comments, and also refrain from adding any new cells._"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 1,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "BOwsuGQQY9OL",
+        "tags": [
+          "graded"
+        ]
+      },
+      "outputs": [],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "import numpy as np\n",
+        "import matplotlib.pyplot as plt\n",
+        "from tensorflow.keras.models import Sequential\n",
+        "from tensorflow.keras.utils import to_categorical\n",
+        "from tensorflow.keras.preprocessing.text import Tokenizer\n",
+        "from tensorflow.keras.preprocessing.sequence import pad_sequences\n",
+        "from tensorflow.keras.layers import Embedding, LSTM, Dense, Bidirectional"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "BTxqlHqKHzhr"
+      },
+      "source": [
+        "For this assignment you will be using the [Shakespeare Sonnets Dataset](https://www.opensourceshakespeare.org/views/sonnets/sonnet_view.php?range=viewrange&sonnetrange1=1&sonnetrange2=154), which contains more than 2000 lines of text extracted from Shakespeare's sonnets."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 2,
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "L2PpS3y9UlWo",
+        "outputId": "1e06105d-fcb9-4542-d48c-85529ae51ae2"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Collecting gdown==5.1.0\n",
+            "  Downloading gdown-5.1.0-py3-none-any.whl (17 kB)\n",
+            "Requirement already satisfied: beautifulsoup4 in /usr/local/lib/python3.10/dist-packages (from gdown==5.1.0) (4.12.3)\n",
+            "Requirement already satisfied: filelock in /usr/local/lib/python3.10/dist-packages (from gdown==5.1.0) (3.13.1)\n",
+            "Requirement already satisfied: requests[socks] in /usr/local/lib/python3.10/dist-packages (from gdown==5.1.0) (2.31.0)\n",
+            "Requirement already satisfied: tqdm in /usr/local/lib/python3.10/dist-packages (from gdown==5.1.0) (4.66.2)\n",
+            "Requirement already satisfied: soupsieve>1.2 in /usr/local/lib/python3.10/dist-packages (from beautifulsoup4->gdown==5.1.0) (2.5)\n",
+            "Requirement already satisfied: charset-normalizer<4,>=2 in /usr/local/lib/python3.10/dist-packages (from requests[socks]->gdown==5.1.0) (3.3.2)\n",
+            "Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.10/dist-packages (from requests[socks]->gdown==5.1.0) (3.6)\n",
+            "Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.10/dist-packages (from requests[socks]->gdown==5.1.0) (2.0.7)\n",
+            "Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.10/dist-packages (from requests[socks]->gdown==5.1.0) (2024.2.2)\n",
+            "Requirement already satisfied: PySocks!=1.5.7,>=1.5.6 in /usr/local/lib/python3.10/dist-packages (from requests[socks]->gdown==5.1.0) (1.7.1)\n",
+            "Installing collected packages: gdown\n",
+            "  Attempting uninstall: gdown\n",
+            "    Found existing installation: gdown 4.7.3\n",
+            "    Uninstalling gdown-4.7.3:\n",
+            "      Successfully uninstalled gdown-4.7.3\n",
+            "Successfully installed gdown-5.1.0\n"
+          ]
+        }
+      ],
+      "source": [
+        "!pip install gdown==5.1.0"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 3,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "WZ4qOUzujMP6",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "49b0c402-ebeb-479e-b1ab-5e2527d4f02d"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "/usr/local/lib/python3.10/dist-packages/gdown/__main__.py:132: FutureWarning: Option `--id` was deprecated in version 4.3.1 and will be removed in 5.0. You don't need to pass it anymore to use a file ID.\n",
+            "  warnings.warn(\n",
+            "Downloading...\n",
+            "From: https://drive.google.com/uc?id=108jAePKK4R3BVYBbYJZ32JWUwxeMg20K\n",
+            "To: /content/sonnets.txt\n",
+            "100% 93.6k/93.6k [00:00<00:00, 107MB/s]\n"
+          ]
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# sonnets.txt\n",
+        "!gdown --id 108jAePKK4R3BVYBbYJZ32JWUwxeMg20K"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 4,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "Pfd-nYKij5yY",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "86640107-d4bb-4249-e511-06387ccf31bb"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "There are 2159 lines of sonnets\n",
+            "\n",
+            "The first 5 lines look like this:\n",
+            "\n",
+            "from fairest creatures we desire increase,\n",
+            "that thereby beauty's rose might never die,\n",
+            "but as the riper should by time decease,\n",
+            "his tender heir might bear his memory:\n",
+            "but thou, contracted to thine own bright eyes,\n"
+          ]
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Define path for file with sonnets\n",
+        "SONNETS_FILE = './sonnets.txt'\n",
+        "\n",
+        "# Read the data\n",
+        "with open('./sonnets.txt') as f:\n",
+        "    data = f.read()\n",
+        "\n",
+        "# Convert to lower case and save as a list\n",
+        "corpus = data.lower().split(\"\\n\")\n",
+        "\n",
+        "print(f\"There are {len(corpus)} lines of sonnets\\n\")\n",
+        "print(f\"The first 5 lines look like this:\\n\")\n",
+        "for i in range(5):\n",
+        "  print(corpus[i])"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "imB15zrSNhA1"
+      },
+      "source": [
+        "## Tokenizing the text\n",
+        "\n",
+        "Now fit the Tokenizer to the corpus and save the total number of words."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 5,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "AAhM_qAZk0o5",
+        "tags": [
+          "graded"
+        ]
+      },
+      "outputs": [],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "tokenizer = Tokenizer()\n",
+        "tokenizer.fit_on_texts(corpus)\n",
+        "total_words = len(tokenizer.word_index) + 1"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "77-0sA46OETa"
+      },
+      "source": [
+        "When converting the text into sequences you can use the `texts_to_sequences` method as you have done throughout this course.\n",
+        "\n",
+        "In the next graded function you will need to process this corpus one line at a time. Given this, it is important to keep in mind that the way you are feeding the data unto this method affects the result. Check the following example to make this clearer.\n",
+        "\n",
+        "The first example of the corpus is a string and looks like this:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 6,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "tqhPxdeXlfjh",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 36
+        },
+        "outputId": "b8843beb-e769-4573-85e0-1ae9a2b4dfc5"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "'from fairest creatures we desire increase,'"
+            ],
+            "application/vnd.google.colaboratory.intrinsic+json": {
+              "type": "string"
+            }
+          },
+          "metadata": {},
+          "execution_count": 6
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "corpus[0]"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "XFMP4z11O3os"
+      },
+      "source": [
+        "If you pass this text directly into the `texts_to_sequences` method you will get an unexpected result:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 7,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "EMSEhmbzNZCE",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "d3112f0d-56c1-4f74-afe4-5ca6f7f1d0b0"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "[[],\n",
+              " [],\n",
+              " [58],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [17],\n",
+              " [6],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [17],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [6],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [6],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [],\n",
+              " [17],\n",
+              " [],\n",
+              " [],\n",
+              " []]"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 7
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "tokenizer.texts_to_sequences(corpus[0])"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "pPZmZtpEPEeI"
+      },
+      "source": [
+        "This happened because `texts_to_sequences` expects a list and you are providing a string. However a string is still and `iterable` in Python so you will get the word index of every character in the string.\n",
+        "\n",
+        "Instead you need to place the example whithin a list before passing it to the method:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 8,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "Qmgo-vXhk4nd",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "56c27554-7a14-46d8-97a3-199219eb3a93"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "[[34, 417, 877, 166, 213, 517]]"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 8
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "tokenizer.texts_to_sequences([corpus[0]])"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "0DU7wK-eQ5dc"
+      },
+      "source": [
+        "Notice that you received the sequence wrapped inside a list so in order to get only the desired sequence you need to explicitly get the first item in the list like this:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 9,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "kpTy8WmIQ57P",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "8ac85784-35ce-4ecc-a36d-c07206e61dcc"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "[34, 417, 877, 166, 213, 517]"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 9
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "tokenizer.texts_to_sequences([corpus[0]])[0]"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "-oqy9KjXRJ9A"
+      },
+      "source": [
+        "## Generating n_grams\n",
+        "\n",
+        "Now complete the `n_gram_seqs` function below. This function receives the fitted tokenizer and the corpus (which is a list of strings) and should return a list containing the `n_gram` sequences for each line in the corpus:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 10,
+      "metadata": {
+        "deletable": false,
+        "id": "iy4baJMDl6kj",
+        "tags": [
+          "graded"
+        ]
+      },
+      "outputs": [],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# GRADED FUNCTION: n_gram_seqs\n",
+        "def n_gram_seqs(corpus, tokenizer):\n",
+        "    \"\"\"\n",
+        "    Generates a list of n-gram sequences\n",
+        "\n",
+        "    Args:\n",
+        "        corpus (list of string): lines of texts to generate n-grams for\n",
+        "        tokenizer (object): an instance of the Tokenizer class containing the word-index dictionary\n",
+        "\n",
+        "    Returns:\n",
+        "        input_sequences (list of int): the n-gram sequences for each line in the corpus\n",
+        "    \"\"\"\n",
+        "    input_sequences = []\n",
+        "\n",
+        "    ### START CODE HERE\n",
+        "    for line in corpus:\n",
+        "      line_sequence = tokenizer.texts_to_sequences([line])[0]\n",
+        "\n",
+        "      for i in range(1,len(line_sequence)):\n",
+        "        n_gram_sequence = line_sequence[:i+1]\n",
+        "        input_sequences.append(n_gram_sequence)\n",
+        "    ### END CODE HERE\n",
+        "\n",
+        "    return input_sequences"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 11,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "DlKqW2pfM7G3",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "e1ba8e25-f437-40ae-965d-bee0fa73b91c"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "n_gram sequences for first example look like this:\n",
+            "\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "[[34, 417],\n",
+              " [34, 417, 877],\n",
+              " [34, 417, 877, 166],\n",
+              " [34, 417, 877, 166, 213],\n",
+              " [34, 417, 877, 166, 213, 517]]"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 11
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Test your function with one example\n",
+        "first_example_sequence = n_gram_seqs([corpus[0]], tokenizer)\n",
+        "\n",
+        "print(\"n_gram sequences for first example look like this:\\n\")\n",
+        "first_example_sequence"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "0HL8Ug6UU0Jt"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "n_gram sequences for first example look like this:\n",
+        "\n",
+        "[[34, 417],\n",
+        " [34, 417, 877],\n",
+        " [34, 417, 877, 166],\n",
+        " [34, 417, 877, 166, 213],\n",
+        " [34, 417, 877, 166, 213, 517]]\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 12,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "wtPpCcBjNc4c",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "10e51978-b405-4096-b9c3-863f8e2e94ac"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "n_gram sequences for next 3 examples look like this:\n",
+            "\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "[[8, 878],\n",
+              " [8, 878, 134],\n",
+              " [8, 878, 134, 351],\n",
+              " [8, 878, 134, 351, 102],\n",
+              " [8, 878, 134, 351, 102, 156],\n",
+              " [8, 878, 134, 351, 102, 156, 199],\n",
+              " [16, 22],\n",
+              " [16, 22, 2],\n",
+              " [16, 22, 2, 879],\n",
+              " [16, 22, 2, 879, 61],\n",
+              " [16, 22, 2, 879, 61, 30],\n",
+              " [16, 22, 2, 879, 61, 30, 48],\n",
+              " [16, 22, 2, 879, 61, 30, 48, 634],\n",
+              " [25, 311],\n",
+              " [25, 311, 635],\n",
+              " [25, 311, 635, 102],\n",
+              " [25, 311, 635, 102, 200],\n",
+              " [25, 311, 635, 102, 200, 25],\n",
+              " [25, 311, 635, 102, 200, 25, 278]]"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 12
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Test your function with a bigger corpus\n",
+        "next_3_examples_sequence = n_gram_seqs(corpus[1:4], tokenizer)\n",
+        "\n",
+        "print(\"n_gram sequences for next 3 examples look like this:\\n\")\n",
+        "next_3_examples_sequence"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "EIzecMczU9UB"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "n_gram sequences for next 3 examples look like this:\n",
+        "\n",
+        "[[8, 878],\n",
+        " [8, 878, 134],\n",
+        " [8, 878, 134, 351],\n",
+        " [8, 878, 134, 351, 102],\n",
+        " [8, 878, 134, 351, 102, 156],\n",
+        " [8, 878, 134, 351, 102, 156, 199],\n",
+        " [16, 22],\n",
+        " [16, 22, 2],\n",
+        " [16, 22, 2, 879],\n",
+        " [16, 22, 2, 879, 61],\n",
+        " [16, 22, 2, 879, 61, 30],\n",
+        " [16, 22, 2, 879, 61, 30, 48],\n",
+        " [16, 22, 2, 879, 61, 30, 48, 634],\n",
+        " [25, 311],\n",
+        " [25, 311, 635],\n",
+        " [25, 311, 635, 102],\n",
+        " [25, 311, 635, 102, 200],\n",
+        " [25, 311, 635, 102, 200, 25],\n",
+        " [25, 311, 635, 102, 200, 25, 278]]\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "dx3V_RjFWQSu"
+      },
+      "source": [
+        "Apply the `n_gram_seqs` transformation to the whole corpus and save the maximum sequence length to use it later:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 13,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "laMwiRUpmuSd",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "78d29b8c-cc02-4519-ee42-102473da4bac"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "n_grams of input_sequences have length: 15462\n",
+            "maximum length of sequences is: 11\n"
+          ]
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Apply the n_gram_seqs transformation to the whole corpus\n",
+        "input_sequences = n_gram_seqs(corpus, tokenizer)\n",
+        "\n",
+        "# Save max length\n",
+        "max_sequence_len = max([len(x) for x in input_sequences])\n",
+        "\n",
+        "print(f\"n_grams of input_sequences have length: {len(input_sequences)}\")\n",
+        "print(f\"maximum length of sequences is: {max_sequence_len}\")"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "2OciMdmEdE9L"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "n_grams of input_sequences have length: 15462\n",
+        "maximum length of sequences is: 11\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "zHY7HroqWq12"
+      },
+      "source": [
+        "## Add padding to the sequences\n",
+        "\n",
+        "Now code the `pad_seqs` function which will pad any given sequences to the desired maximum length. Notice that this function receives a list of sequences and should return a numpy array with the padded sequences:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 14,
+      "metadata": {
+        "cellView": "code",
+        "deletable": false,
+        "id": "WW1-qAZaWOhC",
+        "tags": [
+          "graded"
+        ]
+      },
+      "outputs": [],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# GRADED FUNCTION: pad_seqs\n",
+        "def pad_seqs(input_sequences, maxlen):\n",
+        "    \"\"\"\n",
+        "    Pads tokenized sequences to the same length\n",
+        "\n",
+        "    Args:\n",
+        "        input_sequences (list of int): tokenized sequences to pad\n",
+        "        maxlen (int): maximum length of the token sequences\n",
+        "\n",
+        "    Returns:\n",
+        "        padded_sequences (array of int): tokenized sequences padded to the same length\n",
+        "    \"\"\"\n",
+        "    ### START CODE HERE\n",
+        "    padded_sequences = pad_sequences(input_sequences, maxlen=maxlen)\n",
+        "\n",
+        "    return padded_sequences\n",
+        "    ### END CODE HERE"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 15,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "IqVQ0pb3YHLr",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "0cebf7b3-a1e2-4e79-f191-4b5a2b8fe75e"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "array([[  0,   0,   0,   0,  34, 417],\n",
+              "       [  0,   0,   0,  34, 417, 877],\n",
+              "       [  0,   0,  34, 417, 877, 166],\n",
+              "       [  0,  34, 417, 877, 166, 213],\n",
+              "       [ 34, 417, 877, 166, 213, 517]], dtype=int32)"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 15
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Test your function with the n_grams_seq of the first example\n",
+        "first_padded_seq = pad_seqs(first_example_sequence, max([len(x) for x in first_example_sequence]))\n",
+        "first_padded_seq"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Re_avDznXRnU"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "array([[  0,   0,   0,   0,  34, 417],\n",
+        "       [  0,   0,   0,  34, 417, 877],\n",
+        "       [  0,   0,  34, 417, 877, 166],\n",
+        "       [  0,  34, 417, 877, 166, 213],\n",
+        "       [ 34, 417, 877, 166, 213, 517]], dtype=int32)\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 16,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "j56_UCOBYzZt",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "af94889b-556c-4dbe-f87d-f281b18abe74"
+      },
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "array([[  0,   0,   0,   0,   0,   0,   8, 878],\n",
+              "       [  0,   0,   0,   0,   0,   8, 878, 134],\n",
+              "       [  0,   0,   0,   0,   8, 878, 134, 351],\n",
+              "       [  0,   0,   0,   8, 878, 134, 351, 102],\n",
+              "       [  0,   0,   8, 878, 134, 351, 102, 156],\n",
+              "       [  0,   8, 878, 134, 351, 102, 156, 199],\n",
+              "       [  0,   0,   0,   0,   0,   0,  16,  22],\n",
+              "       [  0,   0,   0,   0,   0,  16,  22,   2],\n",
+              "       [  0,   0,   0,   0,  16,  22,   2, 879],\n",
+              "       [  0,   0,   0,  16,  22,   2, 879,  61],\n",
+              "       [  0,   0,  16,  22,   2, 879,  61,  30],\n",
+              "       [  0,  16,  22,   2, 879,  61,  30,  48],\n",
+              "       [ 16,  22,   2, 879,  61,  30,  48, 634],\n",
+              "       [  0,   0,   0,   0,   0,   0,  25, 311],\n",
+              "       [  0,   0,   0,   0,   0,  25, 311, 635],\n",
+              "       [  0,   0,   0,   0,  25, 311, 635, 102],\n",
+              "       [  0,   0,   0,  25, 311, 635, 102, 200],\n",
+              "       [  0,   0,  25, 311, 635, 102, 200,  25],\n",
+              "       [  0,  25, 311, 635, 102, 200,  25, 278]], dtype=int32)"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 16
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Test your function with the n_grams_seq of the next 3 examples\n",
+        "next_3_padded_seq = pad_seqs(next_3_examples_sequence, max([len(s) for s in next_3_examples_sequence]))\n",
+        "next_3_padded_seq"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "3rmcDluOXcIU"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "array([[  0,   0,   0,   0,   0,   0,   8, 878],\n",
+        "       [  0,   0,   0,   0,   0,   8, 878, 134],\n",
+        "       [  0,   0,   0,   0,   8, 878, 134, 351],\n",
+        "       [  0,   0,   0,   8, 878, 134, 351, 102],\n",
+        "       [  0,   0,   8, 878, 134, 351, 102, 156],\n",
+        "       [  0,   8, 878, 134, 351, 102, 156, 199],\n",
+        "       [  0,   0,   0,   0,   0,   0,  16,  22],\n",
+        "       [  0,   0,   0,   0,   0,  16,  22,   2],\n",
+        "       [  0,   0,   0,   0,  16,  22,   2, 879],\n",
+        "       [  0,   0,   0,  16,  22,   2, 879,  61],\n",
+        "       [  0,   0,  16,  22,   2, 879,  61,  30],\n",
+        "       [  0,  16,  22,   2, 879,  61,  30,  48],\n",
+        "       [ 16,  22,   2, 879,  61,  30,  48, 634],\n",
+        "       [  0,   0,   0,   0,   0,   0,  25, 311],\n",
+        "       [  0,   0,   0,   0,   0,  25, 311, 635],\n",
+        "       [  0,   0,   0,   0,  25, 311, 635, 102],\n",
+        "       [  0,   0,   0,  25, 311, 635, 102, 200],\n",
+        "       [  0,   0,  25, 311, 635, 102, 200,  25],\n",
+        "       [  0,  25, 311, 635, 102, 200,  25, 278]], dtype=int32)\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 17,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "rgK-Q_micEYA",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "5c63722c-32c5-4a4c-aa81-2dc71fce7239"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "padded corpus has shape: (15462, 11)\n"
+          ]
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Pad the whole corpus\n",
+        "input_sequences = pad_seqs(input_sequences, max_sequence_len)\n",
+        "\n",
+        "print(f\"padded corpus has shape: {input_sequences.shape}\")"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "59RD1YYNc7CW"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "padded corpus has shape: (15462, 11)\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ZbOidyPrXxf7"
+      },
+      "source": [
+        "## Split the data into features and labels\n",
+        "\n",
+        "Before feeding the data into the neural network you should split it into features and labels. In this case the features will be the padded n_gram sequences with the last word removed from them and the labels will be the removed word.\n",
+        "\n",
+        "Complete the `features_and_labels` function below. This function expects the padded n_gram sequences as input and should return a tuple containing the features and the one hot encoded labels.\n",
+        "\n",
+        "Notice that the function also receives the total of words in the corpus, this parameter will be very important when one hot enconding the labels since every word in the corpus will be a label at least once. If you need a refresh of how the `to_categorical` function works take a look at the [docs](https://www.tensorflow.org/api_docs/python/tf/keras/utils/to_categorical)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 18,
+      "metadata": {
+        "cellView": "code",
+        "deletable": false,
+        "id": "9WGGbYdnZdmJ",
+        "tags": [
+          "graded"
+        ]
+      },
+      "outputs": [],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# GRADED FUNCTION: features_and_labels\n",
+        "def features_and_labels(input_sequences, total_words):\n",
+        "    \"\"\"\n",
+        "    Generates features and labels from n-grams\n",
+        "\n",
+        "    Args:\n",
+        "        input_sequences (list of int): sequences to split features and labels from\n",
+        "        total_words (int): vocabulary size\n",
+        "\n",
+        "    Returns:\n",
+        "        features, one_hot_labels (array of int, array of int): arrays of features and one-hot encoded labels\n",
+        "    \"\"\"\n",
+        "    ### START CODE HERE\n",
+        "    features = np.array(input_sequences)[:,:-1]\n",
+        "    labels = np.array(input_sequences)[:,-1]\n",
+        "    one_hot_labels = to_categorical(labels, num_classes=total_words)\n",
+        "    ### END CODE HERE\n",
+        "\n",
+        "    return features, one_hot_labels"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 19,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "23DolaBRaIAZ",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "6497f244-3396-40cb-add8-d04055cf2b73"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "labels have shape: (5, 3211)\n",
+            "\n",
+            "features look like this:\n",
+            "\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "array([[  0,   0,   0,   0,  34],\n",
+              "       [  0,   0,   0,  34, 417],\n",
+              "       [  0,   0,  34, 417, 877],\n",
+              "       [  0,  34, 417, 877, 166],\n",
+              "       [ 34, 417, 877, 166, 213]], dtype=int32)"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 19
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Test your function with the padded n_grams_seq of the first example\n",
+        "first_features, first_labels = features_and_labels(first_padded_seq, total_words)\n",
+        "\n",
+        "print(f\"labels have shape: {first_labels.shape}\")\n",
+        "print(\"\\nfeatures look like this:\\n\")\n",
+        "first_features"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "7t4yAx2UaQ43"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "labels have shape: (5, 3211)\n",
+        "\n",
+        "features look like this:\n",
+        "\n",
+        "array([[  0,   0,   0,   0,  34],\n",
+        "       [  0,   0,   0,  34, 417],\n",
+        "       [  0,   0,  34, 417, 877],\n",
+        "       [  0,  34, 417, 877, 166],\n",
+        "       [ 34, 417, 877, 166, 213]], dtype=int32)\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 20,
+      "metadata": {
+        "deletable": false,
+        "editable": false,
+        "id": "GRTuLEt3bRKa",
+        "tags": [
+          "graded"
+        ],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "6a5e3231-e296-4d02-a688-d674b8f17f69"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "features have shape: (15462, 10)\n",
+            "labels have shape: (15462, 3211)\n"
+          ]
+        }
+      ],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# Split the whole corpus\n",
+        "features, labels = features_and_labels(input_sequences, total_words)\n",
+        "\n",
+        "print(f\"features have shape: {features.shape}\")\n",
+        "print(f\"labels have shape: {labels.shape}\")"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "xXSMK_HpdLns"
+      },
+      "source": [
+        "**Expected Output:**\n",
+        "\n",
+        "```\n",
+        "features have shape: (15462, 10)\n",
+        "labels have shape: (15462, 3211)\n",
+        "```"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ltxaOCE_aU6J"
+      },
+      "source": [
+        "## Create the model\n",
+        "\n",
+        "Now you should define a model architecture capable of achieving an accuracy of at least 80%.\n",
+        "\n",
+        "Some hints to help you in this task:\n",
+        "\n",
+        "- An appropriate `output_dim` for the first layer (Embedding) is 100, this is already provided for you.\n",
+        "- A Bidirectional LSTM is helpful for this particular problem.\n",
+        "- The last layer should have the same number of units as the total number of words in the corpus and a softmax activation function.\n",
+        "- This problem can be solved with only two layers (excluding the Embedding) so try out small architectures first."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 25,
+      "metadata": {
+        "cellView": "code",
+        "deletable": false,
+        "id": "XrE6kpJFfvRY",
+        "tags": [
+          "graded"
+        ]
+      },
+      "outputs": [],
+      "source": [
+        "# grader-required-cell\n",
+        "\n",
+        "# GRADED FUNCTION: create_model\n",
+        "def create_model(total_words, max_sequence_len):\n",
+        "    \"\"\"\n",
+        "    Creates a text generator model\n",
+        "\n",
+        "    Args:\n",
+        "        total_words (int): size of the vocabulary for the Embedding layer input\n",
+        "        max_sequence_len (int): length of the input sequences\n",
+        "\n",
+        "    Returns:\n",
+        "        model (tf.keras Model): the text generator model\n",
+        "    \"\"\"\n",
+        "    model = Sequential()\n",
+        "    ### START CODE HERE\n",
+        "    model.add(Embedding(total_words, 100, input_length=max_sequence_len-1))\n",
+        "    model.add(Bidirectional(LSTM(128)))\n",
+        "    model.add(Dense(total_words, activation='softmax'))\n",
+        "\n",
+        "    # Compile the model\n",
+        "    model.compile(loss=\"categorical_crossentropy\",\n",
+        "                  optimizer='adam',\n",
+        "                  metrics=['accuracy'])\n",
+        "\n",
+        "    ### END CODE HERE\n",
+        "\n",
+        "    return model"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 26,
+      "metadata": {
+        "id": "0IpX_Gu_gISk",
+        "tags": [],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "41281e47-119c-464e-dd20-d8663bc6a6b9"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Epoch 1/50\n",
+            "484/484 [==============================] - 16s 25ms/step - loss: 6.8858 - accuracy: 0.0236\n",
+            "Epoch 2/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 6.4381 - accuracy: 0.0313\n",
+            "Epoch 3/50\n",
+            "484/484 [==============================] - 4s 9ms/step - loss: 6.2172 - accuracy: 0.0384\n",
+            "Epoch 4/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 5.9782 - accuracy: 0.0491\n",
+            "Epoch 5/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 5.6824 - accuracy: 0.0626\n",
+            "Epoch 6/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 5.3410 - accuracy: 0.0785\n",
+            "Epoch 7/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 4.9834 - accuracy: 0.0903\n",
+            "Epoch 8/50\n",
+            "484/484 [==============================] - 4s 9ms/step - loss: 4.6070 - accuracy: 0.1180\n",
+            "Epoch 9/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 4.2420 - accuracy: 0.1533\n",
+            "Epoch 10/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 3.8924 - accuracy: 0.2002\n",
+            "Epoch 11/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 3.5544 - accuracy: 0.2568\n",
+            "Epoch 12/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 3.2376 - accuracy: 0.3163\n",
+            "Epoch 13/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 2.9613 - accuracy: 0.3716\n",
+            "Epoch 14/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 2.7124 - accuracy: 0.4222\n",
+            "Epoch 15/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 2.4783 - accuracy: 0.4721\n",
+            "Epoch 16/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 2.2758 - accuracy: 0.5149\n",
+            "Epoch 17/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 2.0898 - accuracy: 0.5521\n",
+            "Epoch 18/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 1.9313 - accuracy: 0.5898\n",
+            "Epoch 19/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 1.7700 - accuracy: 0.6239\n",
+            "Epoch 20/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 1.6308 - accuracy: 0.6565\n",
+            "Epoch 21/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 1.5085 - accuracy: 0.6834\n",
+            "Epoch 22/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 1.3937 - accuracy: 0.7106\n",
+            "Epoch 23/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 1.2952 - accuracy: 0.7300\n",
+            "Epoch 24/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 1.2063 - accuracy: 0.7529\n",
+            "Epoch 25/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 1.1235 - accuracy: 0.7687\n",
+            "Epoch 26/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 1.0440 - accuracy: 0.7833\n",
+            "Epoch 27/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.9791 - accuracy: 0.7959\n",
+            "Epoch 28/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.9237 - accuracy: 0.8051\n",
+            "Epoch 29/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 0.8775 - accuracy: 0.8126\n",
+            "Epoch 30/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.8357 - accuracy: 0.8215\n",
+            "Epoch 31/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.7987 - accuracy: 0.8281\n",
+            "Epoch 32/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 0.7632 - accuracy: 0.8316\n",
+            "Epoch 33/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.7446 - accuracy: 0.8349\n",
+            "Epoch 34/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.7185 - accuracy: 0.8361\n",
+            "Epoch 35/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 0.6919 - accuracy: 0.8411\n",
+            "Epoch 36/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 0.6778 - accuracy: 0.8422\n",
+            "Epoch 37/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.6651 - accuracy: 0.8438\n",
+            "Epoch 38/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 0.6508 - accuracy: 0.8447\n",
+            "Epoch 39/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 0.6472 - accuracy: 0.8453\n",
+            "Epoch 40/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.6293 - accuracy: 0.8458\n",
+            "Epoch 41/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 0.6195 - accuracy: 0.8471\n",
+            "Epoch 42/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 0.6098 - accuracy: 0.8469\n",
+            "Epoch 43/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.6088 - accuracy: 0.8495\n",
+            "Epoch 44/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.6036 - accuracy: 0.8481\n",
+            "Epoch 45/50\n",
+            "484/484 [==============================] - 4s 7ms/step - loss: 0.5986 - accuracy: 0.8473\n",
+            "Epoch 46/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 0.5877 - accuracy: 0.8485\n",
+            "Epoch 47/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.5815 - accuracy: 0.8489\n",
+            "Epoch 48/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.5839 - accuracy: 0.8483\n",
+            "Epoch 49/50\n",
+            "484/484 [==============================] - 4s 8ms/step - loss: 0.5806 - accuracy: 0.8496\n",
+            "Epoch 50/50\n",
+            "484/484 [==============================] - 3s 7ms/step - loss: 0.5740 - accuracy: 0.8492\n"
+          ]
+        }
+      ],
+      "source": [
+        "# Get the untrained model\n",
+        "model = create_model(total_words, max_sequence_len)\n",
+        "\n",
+        "# Train the model\n",
+        "history = model.fit(features, labels, epochs=50, verbose=1)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "gy72RPgly55q"
+      },
+      "source": [
+        "**To pass this assignment, your model should achieve a training accuracy of at least 80%**. If your model didn't achieve this threshold, try training again with a different model architecture, consider increasing the number of unit in your `LSTM` layer."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 27,
+      "metadata": {
+        "id": "1fXTEO3GJ282",
+        "tags": [],
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 887
+        },
+        "outputId": "50d2775c-a465-495e-9e21-56e420365fda"
+      },
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<Figure size 640x480 with 1 Axes>"
+            ],
+            "image/png": "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M1xcqqZ27drJ4XBo2rRprv0XLVqk9u3bM/8L/AJjRgAPkdMVGseOHVOLFi0UHh6uF198UbVq1VJoaKg2bNig/v37y+l0XvJ9g4KCclxv5eJCusvZNzcyMjJ0yy236MiRI+rfv7/q1q2r4sWLa+/evercuXOuvp+7LvTjfu6A4Ew5/Xf566+/1LJlS9WtW1ejRo1SVFSUQkJCtHjxYo0ePdrtukuVKqU77rhD06ZN05AhQzR79mydOnXKFToBX0cYATzY8uXL9c8//2ju3Lm68cYbXet37NhhY1VZypcvr9DQUG3btu2813Jad65ffvlFf/75pz788EN17NjRtX7p0qXZtqtZs6Yk6ddff73ge5UrV07h4eEX3UbK6hk6duyYSpYs6Vq/a9euS9abaeHChTp16pQ+/fTTbL1H33zzTbbtMk9x/frrr5fsKerYsaPuuusurV27VtOmTdO//vUvXX311bmuCfBmnKYBPFhmz8TZPRHp6ekaP368XSVlExQUpNjYWM2fP1/79u1zrd+2bZs+//zzXO0vZf9+lmXpzTffzLZduXLldOONN+r999/X7t27s72WuW9gYKDatGmjhQsXat26ded9VuZ2mQHh22+/db2WmpqqDz/88JL1XqzupKQkffDBB9m2u/XWWxUWFqaEhITzLs89t3epVatWKlu2rF599VWtWLGCXhH4FXpGAA/WvHlzlSpVSp06ddITTzyhgIAATZ06Nd9Ok+SHYcOG6csvv9R1112nHj16KCMjQ2PHjlX9+vW1adOmi+5bt25d1apVS08//bT27t2r8PBwzZkzJ8fxLG+99Zauv/56XXvtterWrZtq1KihnTt36rPPPnN9zvDhw/Xll1+qRYsW6tatm6666irt379fs2bN0sqVK1WyZEndeuutqlq1qh555BE988wzCgoK0vvvv69y5cqdF3Qu5NZbb1VISIhat26t7t276/jx45o8ebLKly+v/fv3u7YLDw/X6NGj9eijj6pp06Z66KGHVKpUKf30009KS0vLFoCKFCmiBx54QGPHjlVQUJAefPDBXNUC+AJ6RgAPVqZMGS1atEgVK1bU888/r9dff1233HKLXnvtNbtLc2ncuLE+//xzlSpVSoMHD9Z7772nF198US1btrzk/BhFihTRwoUL1ahRIyUkJOiFF17QFVdcoY8++ui8bRs2bKgf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\n"
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<Figure size 640x480 with 1 Axes>"
+            ],
+            "image/png": "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8IlTERlGjRqlhQsXqnHjxurdu7e7FNSsWVMbN27M8ee1b99et912m5577jnt2rVLderU0cKFCzVv3jwNGDDAPZh09OjRWr58udq1a6dy5crp0KFD+s9//qOyZcvqlltukSS1atVKpUuXVuPGjVWqVClt3bpV//73v9WuXbuLxnAAyB6KBeDHihUrpq+++kqDBg3SsGHDVKRIEXXv3l3NmzdX69at7Y4nSapbt64WLFigZ555RsOHD1d8fLxGjx6trVu3ZuuqlQuFhIRo/vz5GjFihD755BNNnz5d5cuX18svv6xBgwa5X9ehQwft2rVL7777ro4cOaLixYurWbNmev755+V0OiVJTzzxhD766CNNnDhRycnJKlu2rPr166dhw4Z57J8fCDbcKwSALTp16qQtW7Zo+/btdkcB4EGMsQDgdWfOnMnyePv27frmm29066232hMIgNdwxAKA15UpU0Y9e/bUddddp927d2vatGlyuVzasGGDKlWqZHc8AB7EGAsAXtemTRt9/PHHOnjwoCIiItSoUSO99NJLlAogAHHEAgAAeAxjLAAAgMdQLAAAgMfk+xiL9PR07d+/X4ULF5bD4cjvrwcAALlgWZZOnjypuLg4hYRc/rhEvheL/fv3Kz4+Pr+/FgAAeMDevXtVtmzZyz6f78UiY5rcvXv3KiYmJr+/HgAA5EJSUpLi4+OvOt19vheLjNMfMTExFAsAAPzM1YYxMHgTAAB4DMUCAAB4DMUCAAB4DFN6A0AQsCxLqampSktLszsKfFRoaKjCwsLyPBVEjopF+fLltXv37ou29+nTR1OnTs1TEACAd6SkpOjAgQM6ffq03VHg46KiolSmTBmFh4fn+jNyVCzWrl2bpe3+8ssvatmype65555cBwAAeE96erp27typ0NBQxcXFKTw8nMkJcRHLspSSkqLDhw9r586dqlSp0hUnwbqSHBWLEiVKZHk8duxYVaxYUc2aNbvse1wul1wul/txUlJSDiMCAHIrJSVF6enpio+PV1RUlN1x4MMiIyNVoEAB7d69WykpKSpYsGCuPifXgzdTUlL04YcfqlevXldsvwkJCXI6ne6FWTcBIP/l9r8+EVw88XuS60+YO3euTpw4oZ49e17xdUOHDlViYqJ72bt3b26/EgAA+LhcXxXyzjvvqG3btoqLi7vi6yIiIhQREZHbrwEA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v5Xq15e2bLE7GQB4HsUCyCddu5pbrpcvL/3xhxnUOWeO3akAwLMoFkA+qlNHWrtWuv12M4HWXXeZ+42kp9udDAA8g2IB5LPixc3pkIEDzePRo81MnYcP25sLADyBYgHYICxMmjhReu89KSJC+vprqXZt6b//tTsZAOQNxQKw0UMPSWvWSDVqSAcPSm3bSv36mctTAcAfUSwAm2WMu/jnP83jKVPMVSM//2xvLgDIDYoF4AMiI6XXXpMWLJBKlTKXojZoYE6XMLATgD+hWAA+pE0bafNmM5gzJUUaNEhq3Vr66y+7kwFA9lAsAB9TooQ0d670+uvmSMbixWZg5+ef250MAK6OYgH4IIdDeuIJacMGqW5d6dgx6e67pQcekI4csTsdAFwexQLwYVWqSD/8IP3rX1JIiPTxx+YKki++sDsZAFwaxQLwceHh0pgx0urVplQcOiR16SLddx+TagHwPRQLwE/Ury+tXy8995y5sdknn5ii8dlndicDgEwUC8CPRERIL75oJtWqWdMcsbjnHunee82RDACwG8UC8EN160rr1knDhpmjF59+ao5efPKJZFl2pwMQzCgWgJ+KiJBeeEH68UdzOeqRI2bcRevW0i+/2J0OQLCiWAB+7sYbzZTgI0eagZ6LFplpwvv0YXAngPxHsQACQHi4NGqUtHWruWIkPV2aNk2qVMlMC56SYndCAMGCYgEEkOuuM1eJLF0q3XCDlJhopgWvUUOaP5/xFwC8j2IBBKBmzczgznfeMTc127FD6thRatlS2rTJ7nQAAhnFAghQoaFSr17S9u3S0KFmsOd330n/+If08MPSzp12JwQQiCgWQIArXFh66SUz/uKee8z4ixkzpMqVpd69pX377E4IIJBQLIAgUaGCNHu2mRq8ZUspNdXcQfX666UBA6S//7Y7IYBAQLEAgkzDhtLChdKyZVKTJpLLJb36qhn4OWSIdPSo3QkB+DOKBRCkmjY15WLhQlM2Tp+Wxo0zRzZGjpROnLA7IQB/RLEAgpjDYU6LrFolffmlGdh58qQ0erRUrpy54RmTbAHICYoFADkc0p13mktUP//c3OAsKckM+ixXzozBYJAngOygWABwCwmR7rpL+vlnae5cc6v2M2cyx2A89piZEwMALodiAeAiISFmQq01a8y9R269VTp3Tnr7balKFalbN250BuDSKBYALsvhkFq0kJYskVaulO64w8yDMXOmVKuWKR8rV9qdEoAvoVgAyJabb5a+/lrasMFMtOVwmPuP3HKL1LixNG+eKR0AghvFAkCO3HCDmWhr61Yz5iI8XPrhB6lTJ6l6dXN/EpfL7pQA7EKxAJArVapIb74p7d5t7kUSGytt2yY9+qhUvrw0dixzYQDBKMfFYvny5Wrfvr3i4uLkcDg0d+5cL8QC4C9KlzaXpe7ZI02cKJUtKx08aMpGfLw0cKC0ZYvdKQHklxwXi1OnTqlOnTqaOnWqN/IA8FOFC5sS8eef0vvvm8GdycnS5MlmXoz69aWpU6Vjx+xOCsCbHJZlWbl+s8OhOXPmqFOnTtl+T1JSkpxOpxITExUTE5Pbrwbg4yxL+vZbc7rkyy/NTc8kMyajQwepZ0+pdWspLMzWmACyKbt/v70+xsLlcikpKSnLAiDwORxSmzbSF19I+/ebIxc33CClpEiffWZm+oyPl559ljkxgEDi9WKRkJAgp9PpXuLj4739lQB8TIkSUv/+5lLVDRvMFOHFi5uxGBMmmNMmNWpIw4eb53N/HBWA3bx+KsTlcsl13rVnSUlJio+P51QIEORSUqQFC6QZM8z8GOfOZT5XvryZWvyuu6RGjcxMoADs5TOnQiIiIhQTE5NlAYDwcDNz55w50qFD0ocfmiIRGSnt2mWuMLnlFumaa6Tevc3U4syPAfg+/jsAgO1iY839Rz7/XDpyxIzL6N5dcjrN6ZLXX5datZKKFpXatjWlY9MmTpkAvijH47GTk5O147zbG+7cuVMbN25U0aJFde2113o0HIDgExUlde5slpQUc5+SL74wU4b//bf03/+aRZJKlZKaN5datjT3NClb1t7sAHIxxmLp0qW67bbbLtreo0cPzZgx46rv53JTALlhWebqkUWLpMWLpWXLpNOns76malXp9tulpk2lJk2kuDh7sgKBKLt/v/M0eDM3KBYAPMHlklavNiVj0SJp7dqLb4JWsaIpGRlLhQrmMlgAOUexABBUTpyQli41RzKWL5c2bry4aFxzjSkYjRtLDRtKtWubQaQAro5iASCoJSaau64uXy7973/Sjz9mvaRVkiIipBtvNCUjYylfnqMawKVQLADgPKdPm3KxbJm0apVZP3784teVKGEKRoMG5v4m9eqZybyAYEexAIArsCxpxw5pzZrMZePGi49qSOYoRr16mUWjbl1zKSwQTCgWAJBDZ8+acrFmjRkMunat9Pvvl35t5crmNEr58mbsRtmyZrnmGqlkSSk0ND+TA95HsQAAD0hMlNavl9atM0Vj3TozM+iVhIVJZcpklo2KFaUqVcxSubJUrFi+RAc8imIBAF5y5IgpGJs2Sfv2SX/9lfnzwIGLr0a5ULFiWYtGxnrFimZAKeCLKBYAYIPUVDMNeUbZ2LtX2r5d2rbNLPv2Xf69ISHSddeZklG1ambhqFrVDCrlahXYiWIBAD7o1CkzbuP33zPLRsaSnHz598XGmvEcJUpcfile3PyMjWWMBzwvu3+/c3yvEABA7hUqJP3jH2Y5n2WZ0yi//Za1bPz2m7R7t5kAbOPG7H2Hw2HKRbFiWZeiRTPXzy8kJUua5ygj8ASOWACAjztzxlwau3evGd9x+PDll6Sk3H2Hw3Fx4YiMlAoUyFzCwy9eL1rUXAkTF2d+lihhTukg8HAqBACCUEqKmfjr6NGsy7FjmetHjpjl0CFTRi41UVhuZVwRk1E04uLMERGnU4qJMT8vXHc6GbTqDzgVAgBBKDzc3E6+VKnsv+fcOVM4zj/yceSImdfj3DmzpKRcvJ6SYl7311/S/v3mtvapqebIyt69Oc+dUTgylvMfO51SdLQ5XeNwmKMiDkfW9ZAQs4SHSwULmiUiInP9wm0REVnXOdLiGRQLAAhyBQpIpUubJS/OnTPlIqNo7N9v1o8cMfOBJCVl/ZmYKJ08ad6bkpJZauwSFpa1aBQqZMaqxMZKRYpkrp+/LSbGnDLKWKKisj4uWDBrYUlPN+UrLe3in6GhWU89hYX555VAFAsAgEcUKJA5KVh2paebcpFROM4vHxcWkeRk8/r0dDPYNePn+etpaabgnD2bubhcWR9nbHO5zHsypKaa5dQpz+6X8PDMQpFTYWFmySgbBQua8pKxZJSZCx8PG2aKjx0oFgAA24SEZI6zyG+WZf7Yn180zi8ip06Zq3GutCQmmsG1Gcvp0+bn+fecSUnJfcaMsnP2bM7e9+yzuf/OvKJYAACCksOReSSgcGHPfnZaWmbZOHvWnOYIDTVHHy71MyTEHNXIGMdy4ZKaagqKy2XKS8aSUWYufGzntREUCwAAPCw01Aw2jY7O/ntCQjIHlPozxsACAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPoVgAAACPyfe7m1qWJUlKSkrK768GAAC5lPF3O+Pv+OXke7E4efKkJCk+Pj6/vxoAAOTRyZMn5XQ6L/u8w7pa9fCw9PR07d+/X4ULF5bD4fDY5yYlJSk+Pl579+5VTEyMxz4Xl8b+zl/s7/zF/s5f7O/8ldv9bVmWTp48qbi4OIWEXH4kRb4fsQgJCVHZsmW99vkxMTH8YuYj9nf+Yn/nL/Z3/mJ/56/c7O8rHanIwOBNAADgMRQLAADgMQFTLCIiIjRy5EhFRETYHSUosL/zF/s7f7G/8xf7O395e3/n++BNAAAQuALmiAUAALAfxQIAAHgMxQIAAHgMxQIAAHgMxQIAAHhMwBSLqVOnqnz58ipYsKAaNmyoH3/80e5IAWH58uVq37694uLi5HA4NHfu3CzPW5alESNGqEyZMoqMjFSLFi20fft2e8L6uYSEBNWvX1+FCxdWyZIl1alTJ23bti3La86ePau+ffuqWLFiio6OVpcuXfT333/blNj/TZs2TbVr13bPQNioUSMtWLDA/Tz723vGjh0rh8OhAQMGuLexvz1r1KhRcjgcWZaqVau6n/fW/g6IYvHJJ5/o6aef1siRI/XTTz+pTp06at26tQ4dOmR3NL936tQp1alTR1OnTr3k8+PHj9drr72m119/XWvWrFGhQoXUunVrnT17Np+T+r9ly5apb9++Wr16tRYtWqRz586pVatWOnXqlPs1AwcO1JdffqlPP/1Uy5Yt0/79+3XXXXfZmNq/lS1bVmPHjtX69eu1bt063X777erYsaO2bNkiif3tLWvXrtUbb7yh2rVrZ9nO/va8GjVq6MCBA+5lxYoV7ue8tr+tANCgQQOrb9++7sdpaWlWXFyclZCQYGOqwCPJmjNnjvtxenq6Vbp0aevll192bztx4oQVERFhffzxxzYkDCyHDh2yJFnLli2zLMvs2wIFCliffvqp+zVbt261JFmrVq2yK2bAKVKkiPX222+zv73k5MmTVqVKlaxFixZZzZo1s/r3729ZFr/f3jBy5EirTp06l3zOm/vb749YpKSkaP369WrRooV7W0hIiFq0aKFVq1bZmCzw7dy5UwcPHsyy751Opxo2bMi+94DExERJUtGiRSVJ69ev17lz57Ls76pVq+raa69lf3tAWlqaZs2apVOnTqlRo0bsby/p27ev2rVrl2W/Svx+e8v27dsVFxen6667Tt26ddOePXskeXd/5/vdTT3tyJEjSktLU6lSpbJsL1WqlH777TebUgWHgwcPStIl933Gc8id9PR0DRgwQI0bN1bNmjUlmf0dHh6u2NjYLK9lf+fN5s2b1ahRI509e1bR0dGaM2eOqlevro0bN7K/PWzWrFn66aeftHbt2oue4/fb8xo2bKgZM2aoSpUqOnDggJ5//nk1adJEv/zyi1f3t98XCyAQ9e3bV7/88kuW86HwjipVqmjjxo1KTEzUZ599ph49emjZsmV2xwo4e/fuVf/+/bVo0SIVLFjQ7jhBoW3btu712rVrq2HDhipXrpxmz56tyMhIr32v358KKV68uEJDQy8ayfr333+rdOnSNqUKDhn7l33vWU899ZS++uorLVmyRGXLlnVvL126tFJSUnTixIksr2d/5014eLiuv/561a1bVwkJCapTp45effVV9reHrV+/XocOHdKNN96osLAwhYWFadmyZXrttdcUFhamUqVKsb+9LDY2VpUrV9aOHTu8+vvt98UiPDxcdevW1Xfffefelp6eru+++06NGjWyMVngq1ChgkqXLp1l3yclJWnNmjXs+1ywLEtPPfWU5syZo++//14VKlTI8nzdunVVoECBLPt727Zt2rNnD/vbg9LT0+VyudjfHta8eXNt3rxZGzdudC/16tVTt27d3Ovsb+9KTk7WH3/8oTJlynj39ztPQz99xKxZs6yIiAhrxowZ1q+//mo9/vjjVmxsrHXw4EG7o/m9kydPWhs2bLA2bNhgSbImTpxobdiwwdq9e7dlWZY1duxYKzY21po3b561adMmq2PHjlaFChWsM2fO2Jzc//Tu3dtyOp3W0qVLrQMHDriX06dPu1/z5JNPWtdee631/fffW+vWrbMaNWpkNWrUyMbU/m3IkCHWsmXLrJ07d1qbNm2yhgwZYjkcDmvhwoWWZbG/ve38q0Isi/3taYMGDbKWLl1q7dy501q5cqXVokULq3jx4tahQ4csy/Le/g6IYmFZljVlyhTr2muvtcLDw60GDRpYq1evtjtSQFiyZIkl6aKlR48elmWZS06HDx9ulSpVyoqIiLCaN29ubdu2zd7QfupS+1mSNX36dPdrzpw5Y/Xp08cqUqSIFRUVZXXu3Nk6cOCAfaH9XK9evaxy5cpZ4eHhVokSJazmzZu7S4Vlsb+97cJiwf72rK5du1plypSxwsPDrWuuucbq2rWrtWPHDvfz3trfDsuyrLwd8wAAADD8fowFAADwHRQLAADgMRQLAADgMRQLAADgMRQLAADgMRQLAADgMRQLAADgMRQLAADgMRQLAADgMRQLAADgMRQLAADgMf8fycoanMcasuoAAAAASUVORK5CYII=\n"
+          },
+          "metadata": {}
+        }
+      ],
+      "source": [
+        "# Take a look at the training curves of your model\n",
+        "\n",
+        "acc = history.history['accuracy']\n",
+        "loss = history.history['loss']\n",
+        "\n",
+        "epochs = range(len(acc))\n",
+        "\n",
+        "plt.plot(epochs, acc, 'b', label='Training accuracy')\n",
+        "plt.title('Training accuracy')\n",
+        "\n",
+        "plt.figure()\n",
+        "\n",
+        "plt.plot(epochs, loss, 'b', label='Training Loss')\n",
+        "plt.title('Training loss')\n",
+        "plt.legend()\n",
+        "\n",
+        "plt.show()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "OjvED5A3qrn2"
+      },
+      "source": [
+        "Before closing the assignment, be sure to also download the `history.pkl` file which contains the information of the training history of your model and will be used to compute your grade. You can download this file by running the cell below:"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 28,
+      "metadata": {
+        "id": "9QRG73l6qE-c",
+        "tags": [],
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 17
+        },
+        "outputId": "16ddb7b1-28c1-498b-f99b-7de5570297ee"
+      },
+      "outputs": [
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<IPython.core.display.Javascript object>"
+            ],
+            "application/javascript": [
+              "\n",
+              "    async function download(id, filename, size) {\n",
+              "      if (!google.colab.kernel.accessAllowed) {\n",
+              "        return;\n",
+              "      }\n",
+              "      const div = document.createElement('div');\n",
+              "      const label = document.createElement('label');\n",
+              "      label.textContent = `Downloading \"${filename}\": `;\n",
+              "      div.appendChild(label);\n",
+              "      const progress = document.createElement('progress');\n",
+              "      progress.max = size;\n",
+              "      div.appendChild(progress);\n",
+              "      document.body.appendChild(div);\n",
+              "\n",
+              "      const buffers = [];\n",
+              "      let downloaded = 0;\n",
+              "\n",
+              "      const channel = await google.colab.kernel.comms.open(id);\n",
+              "      // Send a message to notify the kernel that we're ready.\n",
+              "      channel.send({})\n",
+              "\n",
+              "      for await (const message of channel.messages) {\n",
+              "        // Send a message to notify the kernel that we're ready.\n",
+              "        channel.send({})\n",
+              "        if (message.buffers) {\n",
+              "          for (const buffer of message.buffers) {\n",
+              "            buffers.push(buffer);\n",
+              "            downloaded += buffer.byteLength;\n",
+              "            progress.value = downloaded;\n",
+              "          }\n",
+              "        }\n",
+              "      }\n",
+              "      const blob = new Blob(buffers, {type: 'application/binary'});\n",
+              "      const a = document.createElement('a');\n",
+              "      a.href = window.URL.createObjectURL(blob);\n",
+              "      a.download = filename;\n",
+              "      div.appendChild(a);\n",
+              "      a.click();\n",
+              "      div.remove();\n",
+              "    }\n",
+              "  "
+            ]
+          },
+          "metadata": {}
+        },
+        {
+          "output_type": "display_data",
+          "data": {
+            "text/plain": [
+              "<IPython.core.display.Javascript object>"
+            ],
+            "application/javascript": [
+              "download(\"download_5110788a-b17a-4d4d-b80f-d085067f8902\", \"history.pkl\", 942)"
+            ]
+          },
+          "metadata": {}
+        }
+      ],
+      "source": [
+        "def download_history():\n",
+        "  import pickle\n",
+        "  from google.colab import files\n",
+        "\n",
+        "  with open('history.pkl', 'wb') as f:\n",
+        "    pickle.dump(history.history, f)\n",
+        "\n",
+        "  files.download('history.pkl')\n",
+        "\n",
+        "download_history()"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "wdsMszk9zBs_"
+      },
+      "source": [
+        "## See your model in action\n",
+        "\n",
+        "After all your work it is finally time to see your model generating text.\n",
+        "\n",
+        "Run the cell below to generate the next 100 words of a seed text.\n",
+        "\n",
+        "After submitting your assignment you are encouraged to try out training for different amounts of epochs and seeing how this affects the coherency of the generated text. Also try changing the seed text to see what you get!"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 29,
+      "metadata": {
+        "id": "6Vc6PHgxa6Hm",
+        "tags": [],
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "108687d9-25f3-4b86-d402-20ec801f5248"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Help me Obi Wan Kenobi, you're my only hope of my sight doth lie so wide sauces prove i love thee thee my praise ' to write back the wrong ' by i make my mind ' shames to tell of thine alone are so knows from me to be one more nearly you dead worth to the tomb it men it swear to worth her skill ' ' so knows of me alone do now no parts of me grace thine eyes thine eyes my mind thus impediments cunning change eye aside aside be best so more hate prove thee bright more more write ' so show true\n"
+          ]
+        }
+      ],
+      "source": [
+        "seed_text = \"Help me Obi Wan Kenobi, you're my only hope\"\n",
+        "next_words = 100\n",
+        "\n",
+        "for _ in range(next_words):\n",
+        "    # Convert the text into sequences\n",
+        "    token_list = tokenizer.texts_to_sequences([seed_text])[0]\n",
+        "    # Pad the sequences\n",
+        "    token_list = pad_sequences([token_list], maxlen=max_sequence_len-1, padding='pre')\n",
+        "    # Get the probabilities of predicting a word\n",
+        "    predicted = model.predict(token_list, verbose=0)\n",
+        "    # Choose the next word based on the maximum probability\n",
+        "    predicted = np.argmax(predicted, axis=-1).item()\n",
+        "    # Get the actual word from the word index\n",
+        "    output_word = tokenizer.index_word[predicted]\n",
+        "    # Append to the current text\n",
+        "    seed_text += \" \" + output_word\n",
+        "\n",
+        "print(seed_text)"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "oQVDbdcYqSux"
+      },
+      "source": [
+        "## Download your notebook for grading\n",
+        "\n",
+        "Along with the `history.pkl` file earlier, you will also need to submit your solution notebook for grading. The following code cells will check if this notebook's grader metadata (i.e. hidden data in the notebook needed for grading) is not modified by your workspace. This will ensure that the autograder can evaluate your code properly. Depending on its output, you will either:\n",
+        "\n",
+        "* *if the metadata is intact*: Download the current notebook. Click on the File tab on the upper left corner of the screen then click on `Download -> Download .ipynb.` You can name it anything you want as long as it is a valid `.ipynb` (jupyter notebook) file.\n",
+        "<br>\n",
+        "\n",
+        "* *if the metadata is missing*: A new notebook with your solutions will be created on this Colab workspace. It should be downloaded automatically and you can submit that to the grader."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 30,
+      "metadata": {
+        "id": "ZUEiIXZEShHw",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "cef47ca2-21fa-43f7-8598-f2c1c353ed4e"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "--2024-03-13 06:09:10--  https://storage.googleapis.com/tensorflow-1-public/colab_metadata_checker.py\n",
+            "Resolving storage.googleapis.com (storage.googleapis.com)... 64.233.183.207, 173.194.193.207, 173.194.194.207, ...\n",
+            "Connecting to storage.googleapis.com (storage.googleapis.com)|64.233.183.207|:443... connected.\n",
+            "HTTP request sent, awaiting response... 200 OK\n",
+            "Length: 1997 (2.0K) [text/x-python-script]\n",
+            "Saving to: ‘colab_metadata_checker.py’\n",
+            "\n",
+            "\r          colab_met   0%[                    ]       0  --.-KB/s               \rcolab_metadata_chec 100%[===================>]   1.95K  --.-KB/s    in 0s      \n",
+            "\n",
+            "2024-03-13 06:09:10 (36.8 MB/s) - ‘colab_metadata_checker.py’ saved [1997/1997]\n",
+            "\n"
+          ]
+        }
+      ],
+      "source": [
+        "# Download metadata checker\n",
+        "!wget -nc https://storage.googleapis.com/tensorflow-1-public/colab_metadata_checker.py"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": 31,
+      "metadata": {
+        "id": "Ek87UXX7Sj6b",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "b977ddda-737b-42ca-a067-8fa7e3b2678e"
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Grader metadata detected! You can download this notebook by clicking `File > Download > Download as .ipynb` and submit it to the grader!\n"
+          ]
+        }
+      ],
+      "source": [
+        "import colab_metadata_checker\n",
+        "\n",
+        "# Please see the output of this cell to see which file you need to submit to the grader\n",
+        "colab_metadata_checker.run('C3W4_Assignment_fixed.ipynb')"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "JRxrZ2LnUlXK"
+      },
+      "source": [
+        "**Please disregard the following note if the notebook metadata is detected**\n",
+        "\n",
+        "_Note: Just in case the automatic download fails when the metadata is missing, you can also do these steps:_\n",
+        "* _Click the Folder icon on the left side of this screen to open the File Manager._\n",
+        "* _Click the Folder Refresh icon in the File Manager to see the latest files in the workspace. You should see a file ending with a `_fixed.ipynb`._\n",
+        "* _Right-click on that file to save locally and submit it to the grader._"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "6r-X-HXtSc8N"
+      },
+      "source": [
+        "**Congratulations on finishing this week's assignment!**\n",
+        "\n",
+        "You have successfully implemented a neural network capable of predicting the next word in a sequence of text!\n",
+        "\n",
+        "**We hope to see you in the next course of the specialization! Keep it up!**"
+      ]
+    }
+  ],
+  "metadata": {
+    "accelerator": "GPU",
+    "colab": {
+      "provenance": [],
+      "include_colab_link": true
+    },
+    "dlai_version": "1.2.0",
+    "jupytext": {
+      "main_language": "python"
+    },
+    "kernelspec": {
+      "display_name": "Python 3 (ipykernel)",
+      "language": "python",
+      "name": "python3"
+    },
+    "language_info": {
+      "codemirror_mode": {
+        "name": "ipython",
+        "version": 3
+      },
+      "file_extension": ".py",
+      "mimetype": "text/x-python",
+      "name": "python",
+      "nbconvert_exporter": "python",
+      "pygments_lexer": "ipython3",
+      "version": "3.9.13"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
